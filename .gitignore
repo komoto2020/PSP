@@ -348,3 +348,9 @@ MigrationBackup/
 
 # Ionide (cross platform F# VS Code tools) working folder
 .ionide/
+/PSP/PSP1.0/PSP1.0.vcxproj
+/PSP/PSP1.0/PSP1.0.vcxproj.filters
+/PSP/PSP1.1/PSP1.1.vcxproj
+/PSP/PSP1.1/PSP1.1.vcxproj.filters
+/PSP/PSP.sln
+/.gitattributes
