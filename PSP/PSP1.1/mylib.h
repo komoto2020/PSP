@@ -9,6 +9,84 @@ using namespace std;
 
 namespace mylib
 {
+	class FileReading
+	{
+	public:
+		static void csvReading(string file_name, vector<double>* valueX, vector<double>* valueY, int param)
+		{
+			ifstream reading_file(file_name, ios::in);
+			mylib::Show *show_pointer;
+			if (reading_file.fail()) //ファイルが開けなかった場合
+			{
+				vector<string> tmpstr{ "0" };
+				vector<double> tmpvalue{ 0 };
+				show_pointer = new mylib::Show(tmpstr, tmpvalue, 4);
+				show_pointer->displayAsError();
+				delete show_pointer;
+				exit(0);
+			}
+
+			string reading_line_buffer = "";
+			string value_string;
+			double value;
+			if (param == 1)
+			{
+				while (getline(reading_file, reading_line_buffer)) // ファイルから1行ずつ読み込む
+				{
+					value_string = reading_line_buffer;
+					if (any_of(value_string.cbegin(), value_string.cend(), isalpha) || none_of(value_string.cbegin(), value_string.cend(), isdigit)) //値が数値でない場合
+					{
+						vector<string> tmpstr{ "0" };
+						vector<double> tmpvalue{ 0 };
+						show_pointer = new mylib::Show(tmpstr, tmpvalue, 5);
+						show_pointer->displayAsError();
+						delete show_pointer;
+						exit(0);
+					}
+					value = stod(value_string);
+					valueX->push_back(value);
+				}
+			}
+
+			else if (param == 2)
+			{
+				while (getline(reading_file, reading_line_buffer)) // ファイルから1行ずつ読み込む
+				{
+					replace(reading_line_buffer.begin(), reading_line_buffer.end(), ',', ' ');
+					istringstream stringstream(reading_line_buffer);
+					value_string = "";
+					value = 0;
+
+					char dataset_flag = 'X';
+					while (stringstream >> value_string)
+					{
+						if (any_of(value_string.cbegin(), value_string.cend(), isalpha) || none_of(value_string.cbegin(), value_string.cend(), isdigit)) //値が数値でない場合
+						{
+							vector<string> tmpstr{ "0" };
+							vector<double> tmpvalue{ 0 };
+							show_pointer = new mylib::Show(tmpstr, tmpvalue, 5);
+							show_pointer->displayAsError();
+							delete show_pointer;
+							exit(0);
+						}
+						value = stod(value_string);
+						if (dataset_flag == 'X')
+						{
+							valueX->push_back(value);
+							dataset_flag = 'Y';
+						}
+						else
+						{
+							valueY->push_back(value);
+							dataset_flag = 'X';
+						}
+					}
+				}
+			}
+			return;
+		}
+	};
+
 	/**************************************************************/
 	/* クラスCalculation */
 	/* 役割：複数の値からさまざまな計算処理を行う */
@@ -18,14 +96,12 @@ namespace mylib
 	class Calculation // class begin
 	{
 	private:
-		vector<double> valueX;
-		vector<double> valueY;
+		vector<double> value;
 
 	public:
-		Calculation(vector<double> valueX, vector<double> valueY)
+		Calculation(vector<double> value)
 		{
-			this->valueX = valueX;
-			this->valueY = valueY;
+			this->value = value;
 		}
 
 		~Calculation()
@@ -33,44 +109,14 @@ namespace mylib
 
 		}
 
-		double findBeta0() // method
+		double findAverage() // method
 		{
-			double averageX = findAverage(valueX);
-			double averageY = findAverage(valueY);
-			return averageY - findBeta1() * averageX;
-		}
-
-		double findBeta1() // method
-		{
-			vector<double> productXY; // valueXとvalueYの積の集合
-			for (unsigned int i = 0; i < valueX.size(); i++)
-			{
-				productXY.push_back(valueX[i] * valueY[i]);
-			}
-			double sum_productXY = accumulate(productXY.begin(), productXY.end(), 0.0);
-
-			double n_averageXY = valueX.size() * findAverage(valueX) * findAverage(valueY); // n * valueXの平均値 * valueYの平均値
-
-			vector<double> valueX2; // valueXの2乗
-			for (unsigned int i = 0; i < valueX.size(); i++)
-			{
-				valueX2.push_back(valueX[i] * valueX[i]);
-			}
-			double sum_valueX2 = accumulate(valueX2.begin(), valueX2.end(), 0.0); // valueXの2乗の和
-
-			double n_averageX2 = valueX.size() * findAverage(valueX) * findAverage(valueX); // n * valueXの平均値 * valueXの平均値
-
-			return (sum_productXY - n_averageXY) / (sum_valueX2 - n_averageX2);
-		}
-
-		double findAverage(vector<double> values) // method
-		{
-			double sum = accumulate(values.begin(), values.end(), 0.0);
-			int num = values.size();
+			double sum = accumulate(value.begin(), value.end(), 0.0);
+			int num = value.size();
 			return sum / num;
 		}
 
-		double findCorrelation() // method
+		double findCorrelation(vector<double> valueX, vector<double> valueY) // method
 		{
 			vector<double> productXY; // valueXとvalueYの積の集合
 			for (unsigned int i = 0; i < valueX.size(); i++)
@@ -100,6 +146,26 @@ namespace mylib
 			double sum2_valueY = accumulate(valueY.begin(), valueY.end(), 0.0) * accumulate(valueY.begin(), valueY.end(), 0.0); //valueYの和の2乗
 
 			return (n_sum_productXY - product_sumXY) / sqrt((n_sum_valueX2 - sum2_valueX) * (n_sum_valueY2 - sum2_valueY));
+		}
+
+		double findVariance()
+		{
+			vector<double> deviation2; // 偏差の2乗値の集合
+			double average = findAverage();
+			for (unsigned int i = 0; i < value.size(); i++)
+			{
+				double d2 = pow(value[i] - average, 2); // 偏差の2乗値
+				deviation2.push_back(d2);
+			}
+			double sum_diff2 = accumulate(deviation2.begin(), deviation2.end(), 0.0);
+			int n = value.size();
+			return sum_diff2 / (n - 1);
+		}
+
+		double findSTD()
+		{
+			double variance = findVariance();
+			return sqrt(variance);
 		}
 	}; // class end
 
@@ -158,4 +224,12 @@ namespace mylib
 			return;
 		}
 	}; // class end
+
+
+	string getFormat(string file_name)
+	{
+		int format_index = file_name.find_last_of(".");
+		string format_name = file_name.substr(format_index, file_name.size() - format_index);
+		return format_name;
+	}
 }

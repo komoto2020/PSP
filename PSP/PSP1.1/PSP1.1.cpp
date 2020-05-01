@@ -10,10 +10,17 @@
 #include<sstream>
 #include<vector>
 #include<algorithm>
+
 #include"mylib.h"
 using namespace std;
 
-void fileReading(string file_name, vector<double> *valueX, vector<double> *valueY);
+enum scales {
+	VS,
+	S,
+	M,
+	L,
+	VL,
+};
 
 /*********************************************/
 /* メイン関数 */
@@ -34,9 +41,8 @@ int main (int argc, char *argv[]) // function begin
 		delete show_pointer;
 		exit(0);
 	}
-	string file_name = argv[1];
-	int format_index = file_name.find_last_of(".");
-	string format_name = file_name.substr(format_index, file_name.size() - format_index);
+
+	string format_name = mylib::getFormat(argv[1]);
 
 	if (format_name != ".csv") //ファイルの拡張子が.csvではない場合
 	{
@@ -50,12 +56,26 @@ int main (int argc, char *argv[]) // function begin
 
 	vector<double> valueX;
 	vector<double> valueY;
-	fileReading(file_name, &valueX, &valueY);
+	scales scale;
+	mylib::FileReading::csvReading(argv[1], &valueX, &valueY, int(argv[2]));
+	if (int(argv[2]) == 1)
+	{
+		valueY = vector<double>(valueX.size(), 1);
+	}
 
-	mylib::Calculation *calculation_pointer = new mylib::Calculation(valueX, valueY);
+	CalculationRelativeScale *crs_pointer = new CalculationRelativeScale(valueX, valueY);
 
-	vector<string> string_display = { "線形回帰のパラメータβ0", "線形回帰のパラメータβ1", "相関係数r", "相関係数の２乗値r２" , "yk"};
-	vector<double> value_display = { calculation_pointer->findBeta0(), calculation_pointer->findBeta1(), calculation_pointer->findCorrelation(), calculation_pointer->findCorrelation() * calculation_pointer->findCorrelation(), calculation_pointer->findBeta0() + calculation_pointer->findBeta1() * 386};
+	vector<string> string_display = { "VS", "S", "M", "L" , "VL"};
+	vector<double> value_display = 
+	{ 
+		crs_pointer->findCalculationRelativeScale(scale = VS), 
+		crs_pointer->findCalculationRelativeScale(scale = S), 
+		crs_pointer->findCalculationRelativeScale(scale = M), 
+		crs_pointer->findCalculationRelativeScale(scale = L), 
+		crs_pointer->findCalculationRelativeScale(scale = VL)
+	};
+	delete crs_pointer;
+
 	show_pointer = new mylib::Show(string_display, value_display, 0);
 	show_pointer->displayAsItemzation();
 
@@ -64,60 +84,65 @@ int main (int argc, char *argv[]) // function begin
 	return 0;
 } // function end
 
-
-/*********************************************/
-/* 関数fileReading */
-/* 宣言：void fileReading(string file_name, vector<double> *valueX, vector<double> *valueY) */
-/* 処理内容：ファイルを開き、ファイルに記載されたデータセットを読み込む */
-/* 引数：第１引数→ファイル名、第２引数→値を格納する配列のアドレス、第３引数→値を格納する配列のアドレス */
-/* 戻り値：なし */
-/*********************************************/
-void fileReading (string file_name, vector<double> *valueX, vector<double> *valueY) // function begin
+class CalculationRelativeScale
 {
-	ifstream reading_file(file_name, ios::in);
-	mylib::Show *show_pointer;
-	if (reading_file.fail()) //ファイルが開けなかった場合
-	{
-		vector<string> tmpstr{ "0" };
-		vector<double> tmpvalue{ 0 };
-		show_pointer = new mylib::Show(tmpstr, tmpvalue, 4);
-		show_pointer->displayAsError();
-		delete show_pointer;
-		exit(0);
-	}
-	char dataset_flag = 'X';
+private:
+	vector<double> value;
 
-	string reading_line_buffer = "";
-	while (getline(reading_file, reading_line_buffer)) // ファイルから1行ずつ読み込む
+public:
+	CalculationRelativeScale(vector<double> valueX, vector<double> valueY)
 	{
-		replace(reading_line_buffer.begin(), reading_line_buffer.end(), ',', ' ');
-		istringstream stringstream(reading_line_buffer);
-		string value_string = "";
-		double value = 0;
-		while (stringstream >> value_string)
+		for (unsigned int i = 0; i < valueX.size(); i++)
 		{
-			if (any_of(value_string.cbegin(), value_string.cend(), isalpha) || none_of(value_string.cbegin(), value_string.cend(), isdigit)) //値が数値でない場合
-			{
-				vector<string> tmpstr{ "0" };
-				vector<double> tmpvalue{ 0 };
-				show_pointer = new mylib::Show(tmpstr, tmpvalue, 5);
-				show_pointer->displayAsError();
-				delete show_pointer;
-				exit(0);
-			}
-			value = stod(value_string);
-			if (dataset_flag == 'X')
-			{
-				valueX->push_back(value);
-				dataset_flag = 'Y';
-			}
-			else
-			{
-				valueY->push_back(value);
-				dataset_flag = 'X';
-			}
+			this->value.push_back(valueX[i] / valueY[i]);
 		}
 	}
 
-	return;
-} // function end
+	~CalculationRelativeScale()
+	{
+
+	}
+
+	double findCalculationRelativeScale(enum scales scale)
+	{
+		vector<double> value_ln; // valueの自然対数値
+		for (unsigned int i = 0; i < value.size(); i++)
+		{
+			value_ln.push_back(log(value[i]));
+		}
+		
+		mylib::Calculation *calculation_pointer = new mylib::Calculation(value_ln);
+		double average = calculation_pointer->findAverage();
+		double std = calculation_pointer->findSTD();
+
+		delete calculation_pointer;
+
+		double range_ln; // 対数範囲
+		double range_size; // 実際の範囲 
+		switch (scale)
+		{
+		case VS:
+			range_ln = average - 2 * std;
+			break;
+
+		case S:
+			break;
+			range_ln = average - std;
+		
+		case M:
+			range_ln = average;
+			break;
+		
+		case L:
+			range_ln = average + std;
+			break;
+		
+		case VL:
+			range_ln = average + 2 * std;
+			break;
+		}
+
+		range_size = exp(range_ln);
+		return range_size;
+	}
+};
